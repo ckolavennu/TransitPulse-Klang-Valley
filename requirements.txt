@@ -1,0 +1,21 @@
+# Core data analysis
+pandas>=2.2.0
+numpy>=1.26.0
+pyarrow>=16.0.0
+fastparquet>=2024.2.0
+
+# Dashboard and visualisation
+streamlit>=1.36.0
+plotly>=5.22.0
+folium>=0.17.0
+streamlit-folium>=0.22.0
+
+# Utilities
+requests>=2.32.0
+python-dotenv>=1.0.1
+tqdm>=4.66.0
+
+# Optional, useful later for larger files and geospatial work
+polars>=1.0.0
+geopandas>=1.0.0
+shapely>=2.0.0
