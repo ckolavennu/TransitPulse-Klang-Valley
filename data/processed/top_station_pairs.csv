@@ -1,0 +1,101 @@
+origin_code,origin_name,destination_code,destination_name,ridership
+A0,All Stations,KG18,Bukit Bintang,6311186
+KG18,Bukit Bintang,A0,All Stations,5359456
+A0,All Stations,KG20,Tun Razak Exchange,5011222
+KJ10,KLCC,A0,All Stations,4567732
+A0,All Stations,KJ10,KLCC,4412415
+KJ15,KL Sentral,A0,All Stations,4363735
+A0,All Stations,KJ15,KL Sentral,4273242
+KG20,Tun Razak Exchange,A0,All Stations,3334592
+A0,All Stations,KG22,Maluri,3281362
+A0,All Stations,KJ17,Abdullah Hukum,3041787
+A0,All Stations,KJ14,Pasar Seni,3018770
+KG22,Maluri,A0,All Stations,2951359
+KJ17,Abdullah Hukum,A0,All Stations,2950212
+A0,All Stations,KJ09,Ampang Park,2841805
+KJ09,Ampang Park,A0,All Stations,2837871
+KJ14,Pasar Seni,A0,All Stations,2624189
+A0,All Stations,KG09,Bandar Utama,2498813
+A0,All Stations,KG15,Muzium Negara,2490678
+A0,All Stations,AG07,Masjid Jamek,2408531
+A0,All Stations,KG21,Cochrane,2394442
+A0,All Stations,MR06,Bukit Bintang,2384981
+KG15,Muzium Negara,A0,All Stations,2311665
+MR06,Bukit Bintang,A0,All Stations,2154490
+KG09,Bandar Utama,A0,All Stations,2017494
+AG07,Masjid Jamek,A0,All Stations,1998864
+KG21,Cochrane,A0,All Stations,1957969
+A0,All Stations,KJ03,Wangsa Maju,1895949
+A0,All Stations,KJ16,Bank Rakyat Bangsar,1830043
+KJ03,Wangsa Maju,A0,All Stations,1808206
+KJ16,Bank Rakyat Bangsar,A0,All Stations,1805932
+A0,All Stations,KG35,Kajang,1698175
+A0,All Stations,KG25,Taman Mutiara,1610245
+KG16,Pasar Seni,A0,All Stations,1583362
+A0,All Stations,KG07,Surian,1564370
+A0,All Stations,KG16,Pasar Seni,1548642
+KG35,Kajang,A0,All Stations,1547892
+A0,All Stations,KJ19,Universiti,1540786
+KJ13,Masjid Jamek,A0,All Stations,1537883
+A0,All Stations,AG06,Bandaraya,1487343
+MR01,KL Sentral,A0,All Stations,1459827
+KJ19,Universiti,A0,All Stations,1452899
+A0,All Stations,KJ18,Kerinchi,1439115
+A0,All Stations,MR01,KL Sentral,1435461
+A0,All Stations,KG08,Mutiara Damansara,1432468
+KG25,Taman Mutiara,A0,All Stations,1415101
+KJ18,Kerinchi,A0,All Stations,1404655
+A0,All Stations,MR04,Hang Tuah,1398673
+AG06,Bandaraya,A0,All Stations,1349683
+KG07,Surian,A0,All Stations,1339736
+A0,All Stations,AG04,PWTC,1322897
+A0,All Stations,KJ13,Masjid Jamek,1319195
+MR04,Hang Tuah,A0,All Stations,1299738
+A0,All Stations,SP15,Bandar Tasik Selatan,1283560
+KG08,Mutiara Damansara,A0,All Stations,1280454
+A0,All Stations,AG10,Pudu,1249445
+A0,All Stations,KG26,Taman Connaught,1240842
+A0,All Stations,KG14,Semantan,1221721
+A0,All Stations,KG10,TTDI,1217696
+SP15,Bandar Tasik Selatan,A0,All Stations,1197795
+A0,All Stations,KJ28,Subang Jaya,1186691
+KJ27,Cgc Glenmarie,A0,All Stations,1181880
+A0,All Stations,KJ27,Cgc Glenmarie,1174080
+KJ02,Taman Melati,A0,All Stations,1169553
+A0,All Stations,KJ02,Taman Melati,1169414
+A0,All Stations,MR05,Imbi,1154494
+A0,All Stations,KJ04,Sri Rampai,1148891
+AG04,PWTC,A0,All Stations,1147986
+KJ28,Subang Jaya,A0,All Stations,1135913
+PYL20,Ampang Park,A0,All Stations,1124380
+MR05,Imbi,A0,All Stations,1121484
+A0,All Stations,KG13,Pusat Bandar Damansara,1116142
+A0,All Stations,PYL04,Sungai Buloh,1108822
+KJ21,Asia Jaya,A0,All Stations,1106598
+KG14,Semantan,A0,All Stations,1105173
+AG10,Pudu,A0,All Stations,1096463
+KG26,Taman Connaught,A0,All Stations,1092782
+A0,All Stations,AG18,Ampang,1089870
+KG10,TTDI,A0,All Stations,1071852
+A0,All Stations,KG06,Kota Damansara,1071652
+KJ04,Sri Rampai,A0,All Stations,1063295
+A0,All Stations,KJ21,Asia Jaya,1052742
+KJ26,Ara Damansara,A0,All Stations,1021370
+A0,All Stations,KG27,Taman Suntex,1016411
+KG13,Pusat Bandar Damansara,A0,All Stations,1007614
+A0,All Stations,MR07,Raja Chulan,1001394
+KG06,Kota Damansara,A0,All Stations,998832
+A0,All Stations,KJ26,Ara Damansara,978283
+A0,All Stations,AG01,Sentul Timur,972394
+A0,All Stations,KJ29,SS 15,963779
+A0,All Stations,AG08,Plaza Rakyat,953295
+KJ29,SS 15,A0,All Stations,951103
+A0,All Stations,AG16,Cempaka,932351
+A0,All Stations,SP13,Salak Selatan,925403
+A0,All Stations,KJ12,Dang Wangi,922289
+KG27,Taman Suntex,A0,All Stations,914707
+KJ01,Gombak,A0,All Stations,912020
+A0,All Stations,KJ01,Gombak,909609
+A0,All Stations,SP17,Bukit Jalil,893827
+A0,All Stations,MR10,Chow Kit,892647
+KJ12,Dang Wangi,A0,All Stations,886801
