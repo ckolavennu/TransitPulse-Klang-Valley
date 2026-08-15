@@ -258,30 +258,62 @@ def route_shape_data(
     trips: pd.DataFrame,
     shapes: pd.DataFrame,
 ) -> list[tuple[str, str, list[tuple[float, float]]]]:
-    """Return route label, colour and shape coordinates for Folium."""
+    """Return one representative route shape per route for Folium.
+
+    GTFS often contains many near-identical shape IDs for scheduled trips. Drawing
+    all of them creates a very large Folium payload and can exhaust Streamlit
+    Community Cloud resources. TransitPulse selects the longest available shape
+    for each route, which is sufficient for the exploratory network map.
+    """
+    if routes.empty or trips.empty or shapes.empty:
+        return []
+
     route_meta = routes.copy()
     route_meta["route_id"] = route_meta["route_id"].astype(str)
+
+    if "route_color" not in route_meta.columns:
+        route_meta["route_color"] = "2563EB"
+    if "route_short_name" not in route_meta.columns:
+        route_meta["route_short_name"] = pd.NA
+    if "route_long_name" not in route_meta.columns:
+        route_meta["route_long_name"] = pd.NA
+
     route_meta["route_color_clean"] = route_meta["route_color"].apply(clean_hex)
     route_meta["route_label"] = route_meta["route_short_name"].fillna(
         route_meta["route_long_name"]
     )
     route_meta["route_label"] = route_meta["route_label"].fillna(route_meta["route_id"])
 
-    shape_routes = (
-        trips[["shape_id", "route_id"]].dropna().astype(str).drop_duplicates()
-    ).merge(
-        route_meta[["route_id", "route_color_clean", "route_label"]],
-        on="route_id",
-        how="left",
+    shape_counts = (
+        shapes.groupby("shape_id", as_index=False)
+        .size()
+        .rename(columns={"size": "point_count"})
+    )
+    candidates = (
+        trips[["shape_id", "route_id"]]
+        .dropna()
+        .astype(str)
+        .drop_duplicates()
+        .merge(shape_counts, on="shape_id", how="left")
+        .sort_values(["route_id", "point_count"], ascending=[True, False])
+        .drop_duplicates("route_id")
+        .merge(
+            route_meta[["route_id", "route_color_clean", "route_label"]],
+            on="route_id",
+            how="left",
+        )
     )
 
+    selected_shape_ids = set(candidates["shape_id"].astype(str))
+    selected_shapes = shapes[shapes["shape_id"].astype(str).isin(selected_shape_ids)].copy()
+    selected_shapes["shape_id"] = selected_shapes["shape_id"].astype(str)
     shape_lookup = (
-        shapes.sort_values(["shape_id", "shape_pt_sequence"])
+        selected_shapes.sort_values(["shape_id", "shape_pt_sequence"])
         .groupby("shape_id", sort=False)
     )
 
     output: list[tuple[str, str, list[tuple[float, float]]]] = []
-    for _, row in shape_routes.iterrows():
+    for _, row in candidates.iterrows():
         shape_id = str(row["shape_id"])
         if shape_id not in shape_lookup.groups:
             continue
