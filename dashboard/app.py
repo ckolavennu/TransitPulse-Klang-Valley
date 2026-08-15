@@ -1,382 +1,255 @@
-"""Portfolio-ready Streamlit dashboard for TransitPulse Klang Valley."""
+"""TransitPulse Klang Valley: commuter and network accessibility explorer."""
 
 from __future__ import annotations
 
 from html import escape
 from pathlib import Path
+import sys
 
+import folium
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from streamlit_folium import st_folium
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROCESSED_DATA_DIR = PROJECT_ROOT / "data" / "processed"
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from analysis.accessibility import (  # noqa: E402
+    build_station_metrics,
+    haversine_distances_km,
+    normalize_station_name,
+    route_shape_data,
+    score_location,
+)
+from data_ingestion.gtfs_static import GTFS_URL, fetch_rapid_rail_gtfs  # noqa: E402
+
+RIDERSHIP_SOURCE = "https://data.gov.my/data-catalogue/ridership_headline"
+OD_SOURCE = "https://data.gov.my/data-catalogue/ridership_od_rapidrail_daily"
+GTFS_DOCS = "https://developer.data.gov.my/realtime-api/gtfs-static"
 
 ACCENT = "#2563EB"
-ACCENT_2 = "#06B6D4"
-INK = "#111827"
-MUTED = "#64748B"
-GRID = "#E2E8F0"
-PALETTE = [
-    "#2563EB",
-    "#06B6D4",
-    "#8B5CF6",
-    "#F59E0B",
-    "#10B981",
-    "#EF4444",
-    "#EC4899",
-    "#14B8A6",
-]
+CYAN = "#06B6D4"
+INK = "#0F172A"
+PALETTE = ["#2563EB", "#06B6D4", "#8B5CF6", "#F59E0B", "#10B981", "#EF4444"]
+QUADRANT_COLORS = {
+    "High demand / lower access": "#F97316",
+    "High demand / strong access": "#2563EB",
+    "Lower demand / strong access": "#10B981",
+    "Lower demand / lower access": "#94A3B8",
+}
 
 st.set_page_config(
     page_title="TransitPulse Klang Valley",
     page_icon="🚆",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown(
     """
-    <style>
-    :root {
-        --tp-ink: #111827;
-        --tp-muted: #64748B;
-        --tp-border: #E2E8F0;
-        --tp-card: #FFFFFF;
-        --tp-bg: #F5F7FB;
-    }
-
-    .stApp { background: var(--tp-bg); }
-    .block-container {
-        max-width: 1440px;
-        padding-top: 1.5rem;
-        padding-bottom: 3rem;
-    }
-    header[data-testid="stHeader"] {
-        background: rgba(245, 247, 251, 0.82);
-        backdrop-filter: blur(12px);
-    }
-    section[data-testid="stSidebar"] {
-        border-right: 1px solid var(--tp-border);
-        background: #FFFFFF;
-    }
-
-    .tp-brand {
-        display: flex;
-        align-items: center;
-        gap: .7rem;
-        margin-bottom: 1.2rem;
-    }
-    .tp-logo {
-        width: 38px;
-        height: 38px;
-        border-radius: 12px;
-        display: grid;
-        place-items: center;
-        color: #FFFFFF;
-        font-weight: 800;
-        background: linear-gradient(135deg, #2563EB 0%, #06B6D4 100%);
-        box-shadow: 0 8px 22px rgba(37, 99, 235, .22);
-    }
-    .tp-brand-name { font-weight: 800; color: var(--tp-ink); line-height: 1.05; }
-    .tp-brand-sub { color: var(--tp-muted); font-size: .76rem; margin-top: .12rem; }
-
-    .tp-hero {
-        position: relative;
-        overflow: hidden;
-        border-radius: 24px;
-        padding: 2.05rem 2.2rem;
-        margin: .2rem 0 1.2rem 0;
-        color: #FFFFFF;
-        background:
-            radial-gradient(circle at 88% 18%, rgba(6,182,212,.28), transparent 28%),
-            radial-gradient(circle at 65% 100%, rgba(37,99,235,.35), transparent 35%),
-            linear-gradient(120deg, #0F172A 0%, #172554 55%, #0F3A5B 100%);
-        box-shadow: 0 18px 50px rgba(15, 23, 42, .12);
-    }
-    .tp-eyebrow {
-        display: inline-flex;
-        gap: .4rem;
-        align-items: center;
-        font-size: .78rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .08em;
-        color: #BAE6FD;
-        margin-bottom: .75rem;
-    }
-    .tp-hero h1 {
-        margin: 0;
-        font-size: clamp(2rem, 4vw, 3.2rem);
-        line-height: 1.03;
-        letter-spacing: -.04em;
-        color: #FFFFFF;
-    }
-    .tp-hero p {
-        max-width: 760px;
-        margin: .85rem 0 0 0;
-        color: #D7E3F4;
-        font-size: 1rem;
-        line-height: 1.65;
-    }
-    .tp-chip-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .55rem;
-        margin-top: 1.25rem;
-    }
-    .tp-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .42rem .68rem;
-        border: 1px solid rgba(255,255,255,.16);
-        border-radius: 999px;
-        background: rgba(255,255,255,.08);
-        color: #E2E8F0;
-        font-size: .78rem;
-    }
-
-    .tp-section-head {
-        margin: 1.55rem 0 .8rem 0;
-    }
-    .tp-section-title {
-        color: var(--tp-ink);
-        font-size: 1.28rem;
-        font-weight: 800;
-        letter-spacing: -.02em;
-    }
-    .tp-section-copy {
-        color: var(--tp-muted);
-        font-size: .88rem;
-        margin-top: .18rem;
-    }
-
-    .tp-card {
-        min-height: 112px;
-        padding: 1rem 1.05rem;
-        border-radius: 18px;
-        border: 1px solid var(--tp-border);
-        background: #FFFFFF;
-        box-shadow: 0 6px 24px rgba(15, 23, 42, .045);
-    }
-    .tp-card-label {
-        color: var(--tp-muted);
-        font-size: .76rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .055em;
-        margin-bottom: .48rem;
-    }
-    .tp-card-value {
-        color: var(--tp-ink);
-        font-size: 1.72rem;
-        font-weight: 800;
-        letter-spacing: -.035em;
-        line-height: 1.05;
-    }
-    .tp-card-foot { color: var(--tp-muted); font-size: .75rem; margin-top: .48rem; }
-
-    .tp-insight {
-        height: 100%;
-        padding: 1rem 1.05rem;
-        border-radius: 16px;
-        border: 1px solid #DBEAFE;
-        background: linear-gradient(135deg, #EFF6FF 0%, #F0FDFA 100%);
-    }
-    .tp-insight-kicker {
-        color: #1D4ED8;
-        font-size: .72rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: .07em;
-        margin-bottom: .38rem;
-    }
-    .tp-insight-text { color: #1E293B; font-size: .91rem; line-height: 1.5; }
-
-    .tp-callout {
-        padding: 1rem 1.1rem;
-        border-radius: 16px;
-        border: 1px solid var(--tp-border);
-        background: #FFFFFF;
-        color: #334155;
-        font-size: .9rem;
-        line-height: 1.55;
-    }
-
-    div[data-testid="stPlotlyChart"] {
-        border: 1px solid var(--tp-border);
-        border-radius: 18px;
-        background: #FFFFFF;
-        padding: .35rem .5rem .2rem .5rem;
-        box-shadow: 0 6px 24px rgba(15, 23, 42, .04);
-    }
-    div[data-testid="stDataFrame"] {
-        border: 1px solid var(--tp-border);
-        border-radius: 16px;
-        overflow: hidden;
-    }
-    div[data-testid="stDownloadButton"] button {
-        border-radius: 12px;
-        font-weight: 700;
-    }
-    div[role="radiogroup"] { gap: .2rem; }
-    div[role="radiogroup"] label { border-radius: 999px; padding: .15rem .3rem; }
-
-    .tp-footer {
-        text-align: center;
-        color: var(--tp-muted);
-        font-size: .78rem;
-        padding-top: 2.4rem;
-    }
-
-    @media (max-width: 800px) {
-        .tp-hero { padding: 1.5rem 1.25rem; border-radius: 20px; }
-        .tp-card { min-height: 98px; }
-    }
-    </style>
-    """,
+<style>
+:root{--ink:#0F172A;--muted:#64748B;--border:#E2E8F0;--bg:#F6F8FC}
+.stApp{background:radial-gradient(circle at 88% 3%,rgba(37,99,235,.08),transparent 28rem),var(--bg)}
+.block-container{max-width:1460px;padding-top:1.2rem;padding-bottom:4rem}
+header[data-testid="stHeader"]{background:rgba(246,248,252,.8);backdrop-filter:blur(12px)}
+.tp-hero{padding:2.4rem 2.5rem;border-radius:26px;background:radial-gradient(circle at 88% 20%,rgba(34,211,238,.26),transparent 20rem),linear-gradient(135deg,#081426,#102A56 55%,#164E63);box-shadow:0 24px 70px rgba(15,23,42,.14);color:#fff;margin-bottom:1.2rem}
+.tp-hero .eyebrow{display:inline-block;padding:.34rem .68rem;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);color:#BAE6FD;font-size:.76rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.9rem}
+.tp-hero h1{max-width:930px;font-size:clamp(2.35rem,5vw,4.7rem);line-height:.98;letter-spacing:-.055em;margin:0 0 1rem;color:#fff}
+.tp-hero p{max-width:820px;font-size:1.08rem;line-height:1.65;color:#CBD5E1;margin:0}
+.tp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:.2rem 0 1.25rem}
+.tp-purpose,.tp-metric{background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:19px;box-shadow:0 8px 26px rgba(15,23,42,.04)}
+.tp-purpose{padding:1.2rem 1.3rem}.tp-purpose .k{color:#2563EB;font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.tp-purpose .t{font-size:1.15rem;font-weight:850;color:var(--ink);margin:.3rem 0}.tp-purpose .c{font-size:.92rem;color:var(--muted);line-height:1.55}
+.tp-kicker{color:#2563EB;font-weight:800;text-transform:uppercase;font-size:.73rem;letter-spacing:.08em;margin-top:.6rem}.tp-title{font-size:1.72rem;font-weight:850;letter-spacing:-.025em;color:var(--ink);margin:.18rem 0}.tp-copy{color:var(--muted);line-height:1.55;margin-bottom:.9rem}
+.tp-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem;margin:.8rem 0 1rem}.tp-metric{padding:1rem 1.05rem;min-height:108px}.tp-metric .l{color:var(--muted);font-size:.75rem;font-weight:750;text-transform:uppercase;letter-spacing:.055em}.tp-metric .v{color:var(--ink);font-size:1.65rem;font-weight:850;line-height:1.08;margin-top:.42rem}.tp-metric .n{color:var(--muted);font-size:.75rem;line-height:1.35;margin-top:.4rem}
+.tp-insight{border:1px solid #BFDBFE;background:linear-gradient(135deg,#EFF6FF,#ECFEFF);border-radius:16px;padding:.92rem 1rem;color:#1E3A5F;line-height:1.55;margin:.55rem 0 .9rem}.tp-note{border:1px solid var(--border);background:rgba(255,255,255,.75);border-radius:15px;padding:.82rem .95rem;color:var(--muted);line-height:1.5;font-size:.88rem}.pill{display:inline-block;padding:.2rem .5rem;margin:.12rem .18rem .12rem 0;border-radius:999px;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;font-size:.75rem;font-weight:760}
+div[data-testid="stDataFrame"]{border:1px solid var(--border);border-radius:14px;overflow:hidden}
+@media(max-width:850px){.tp-hero{padding:1.6rem 1.25rem}.tp-grid,.tp-metrics{grid-template-columns:1fr}}
+</style>
+""",
     unsafe_allow_html=True,
 )
 
 
-def format_compact(value: float | int | None) -> str:
+def section(kicker: str, title: str, copy: str) -> None:
+    st.markdown(
+        f'<div class="tp-kicker">{escape(kicker)}</div>'
+        f'<div class="tp-title">{escape(title)}</div>'
+        f'<div class="tp-copy">{escape(copy)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def metrics(items: list[tuple[str, str, str]]) -> None:
+    html = "".join(
+        f'<div class="tp-metric"><div class="l">{escape(a)}</div>'
+        f'<div class="v">{escape(b)}</div><div class="n">{escape(c)}</div></div>'
+        for a, b, c in items
+    )
+    st.markdown(f'<div class="tp-metrics">{html}</div>', unsafe_allow_html=True)
+
+
+def compact(value: float | int | None) -> str:
     if value is None or pd.isna(value):
         return "0"
     value = float(value)
-    absolute = abs(value)
-    if absolute >= 1_000_000_000:
-        return f"{value / 1_000_000_000:.2f}B"
-    if absolute >= 1_000_000:
-        return f"{value / 1_000_000:.2f}M"
-    if absolute >= 1_000:
-        return f"{value / 1_000:.1f}K"
+    if abs(value) >= 1e9:
+        return f"{value/1e9:.2f}B"
+    if abs(value) >= 1e6:
+        return f"{value/1e6:.2f}M"
+    if abs(value) >= 1e3:
+        return f"{value/1e3:.1f}K"
     return f"{value:,.0f}"
 
 
-def format_percent(value: float | None, decimals: int = 1) -> str:
-    if value is None or pd.isna(value):
-        return "—"
-    return f"{value:.{decimals}f}%"
-
-
-def metric_card(label: str, value: str, foot: str = "") -> None:
-    st.markdown(
-        f"""
-        <div class="tp-card">
-            <div class="tp-card-label">{escape(str(label))}</div>
-            <div class="tp-card-value">{escape(str(value))}</div>
-            <div class="tp-card-foot">{escape(str(foot))}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def insight_card(kicker: str, text: str) -> None:
-    st.markdown(
-        f"""
-        <div class="tp-insight">
-            <div class="tp-insight-kicker">{escape(str(kicker))}</div>
-            <div class="tp-insight-text">{escape(str(text))}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def section_header(title: str, copy: str = "") -> None:
-    st.markdown(
-        f"""
-        <div class="tp-section-head">
-            <div class="tp-section-title">{escape(title)}</div>
-            <div class="tp-section-copy">{escape(copy)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def style_chart(fig, height: int = 420, hovermode: str = "closest"):
+def style_chart(fig, height: int = 430) -> None:
     fig.update_layout(
         height=height,
-        margin=dict(l=24, r=24, t=64, b=34),
+        margin=dict(l=18, r=18, t=52, b=24),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, Arial, sans-serif", color=INK, size=12),
-        title=dict(font=dict(size=16, color=INK), x=0.02, xanchor="left"),
+        font=dict(color=INK),
         legend_title_text="",
-        hovermode=hovermode,
-        colorway=PALETTE,
+        hoverlabel=dict(bgcolor="white"),
     )
-    fig.update_xaxes(
-        showgrid=False,
-        zeroline=False,
-        linecolor=GRID,
-        tickfont=dict(color=MUTED),
-        title_font=dict(color=MUTED),
-    )
-    fig.update_yaxes(
-        gridcolor=GRID,
-        zeroline=False,
-        tickfont=dict(color=MUTED),
-        title_font=dict(color=MUTED),
-    )
-    return fig
+    fig.update_xaxes(gridcolor="#EAEFF5", zeroline=False)
+    fig.update_yaxes(gridcolor="#EAEFF5", zeroline=False)
 
 
 @st.cache_data(show_spinner=False)
-def load_parquet(filename: str) -> pd.DataFrame:
-    path = PROCESSED_DATA_DIR / filename
-    if not path.exists():
-        return pd.DataFrame()
-    return pd.read_parquet(path)
+def load_parquet(name: str) -> pd.DataFrame:
+    path = PROCESSED_DATA_DIR / name
+    return pd.read_parquet(path) if path.exists() else pd.DataFrame()
 
 
-def filter_by_date(df: pd.DataFrame, date_col: str, start_date, end_date) -> pd.DataFrame:
-    if df.empty or date_col not in df.columns:
-        return df
-    work = df.copy()
-    work[date_col] = pd.to_datetime(work[date_col])
-    return work[
-        (work[date_col].dt.date >= start_date)
-        & (work[date_col].dt.date <= end_date)
-    ]
+@st.cache_data(ttl=86_400, show_spinner=False)
+def gtfs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    return fetch_rapid_rail_gtfs()
 
 
-def make_download_button(df: pd.DataFrame, label: str, file_name: str) -> None:
-    if df.empty:
-        return
-    st.download_button(
-        label=label,
-        data=df.to_csv(index=False).encode("utf-8"),
-        file_name=file_name,
-        mime="text/csv",
-        use_container_width=True,
+def add_routes(
+    fmap: folium.Map,
+    routes: pd.DataFrame,
+    trips: pd.DataFrame,
+    shapes: pd.DataFrame,
+    opacity: float = 0.5,
+) -> None:
+    for label, color, coords in route_shape_data(routes, trips, shapes):
+        folium.PolyLine(
+            coords, color=color, weight=3, opacity=opacity, tooltip=label
+        ).add_to(fmap)
+
+
+def add_stations(fmap: folium.Map, stations: pd.DataFrame, compact_markers: bool = False) -> None:
+    for _, row in stations.iterrows():
+        color = QUADRANT_COLORS.get(str(row["quadrant"]), "#64748B")
+        radius = 4 if compact_markers else 4 + min(float(row["demand_score"]) / 28, 4)
+        lines = ", ".join(row["route_labels"]) if isinstance(row["route_labels"], list) else ""
+        popup = (
+            f"<b>{escape(str(row['station_label']))}</b><br>"
+            f"Lines: {escape(lines or '—')}<br>"
+            f"Accessibility: <b>{float(row['accessibility_score']):.0f}/100</b><br>"
+            f"Demand percentile: <b>{float(row['demand_score']):.0f}</b><br>"
+            f"2026 activity: <b>{compact(row['total_station_activity'])} trips</b>"
+        )
+        folium.CircleMarker(
+            [float(row["stop_lat"]), float(row["stop_lon"])],
+            radius=radius,
+            color="white",
+            weight=1.1,
+            fill=True,
+            fill_color=color,
+            fill_opacity=.88,
+            tooltip=str(row["station_label"]),
+            popup=folium.Popup(popup, max_width=290),
+        ).add_to(fmap)
+
+
+def commuter_map(
+    stations: pd.DataFrame,
+    routes: pd.DataFrame,
+    trips: pd.DataFrame,
+    shapes: pd.DataFrame,
+    location: tuple[float, float] | None,
+    station_code: str | None = None,
+) -> folium.Map:
+    center = location or (3.13, 101.69)
+    fmap = folium.Map(
+        location=list(center),
+        zoom_start=13 if location else 10,
+        tiles="CartoDB positron",
+        control_scale=True,
     )
+    add_routes(fmap, routes, trips, shapes, .34)
+
+    visible = stations
+    if location:
+        d = haversine_distances_km(
+            location[0], location[1], stations["stop_lat"], stations["stop_lon"]
+        )
+        visible = stations[d <= 3].copy()
+    add_stations(fmap, visible, True)
+
+    if location:
+        folium.Marker(
+            list(location), tooltip="Selected location", icon=folium.Icon(color="red")
+        ).add_to(fmap)
+        folium.Circle(
+            list(location),
+            radius=800,
+            color=ACCENT,
+            weight=2,
+            dash_array="6 5",
+            fill=True,
+            fill_color="#60A5FA",
+            fill_opacity=.06,
+            tooltip="800 m catchment proxy",
+        ).add_to(fmap)
+
+    if station_code:
+        hit = stations[stations["station_code"] == station_code]
+        if not hit.empty:
+            row = hit.iloc[0]
+            folium.Circle(
+                [float(row["stop_lat"]), float(row["stop_lon"])],
+                radius=110,
+                color="#0F172A",
+                weight=3,
+                fill=False,
+                tooltip="Selected station",
+            ).add_to(fmap)
+    return fmap
 
 
-def render_hero(min_date, max_date, service_count: int, data_through) -> None:
-    st.markdown(
-        f"""
-        <div class="tp-hero">
-            <div class="tp-eyebrow">🚆 Klang Valley mobility intelligence</div>
-            <h1>TransitPulse Klang Valley</h1>
-            <p>
-                Turning public transport ridership and station-to-station demand into
-                clear signals about how Klang Valley moves.
-            </p>
-            <div class="tp-chip-row">
-                <span class="tp-chip">Historical ridership</span>
-                <span class="tp-chip">Rapid Rail OD flows</span>
-                <span class="tp-chip">{escape(str(service_count))} services available</span>
-                <span class="tp-chip">{escape(str(min_date))} → {escape(str(max_date))}</span>
-                <span class="tp-chip">Data through {escape(str(data_through))}</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+def network_map(
+    stations: pd.DataFrame,
+    routes: pd.DataFrame,
+    trips: pd.DataFrame,
+    shapes: pd.DataFrame,
+    catchments: bool,
+) -> folium.Map:
+    fmap = folium.Map(
+        location=[3.13, 101.69],
+        zoom_start=10,
+        tiles="CartoDB positron",
+        control_scale=True,
+        prefer_canvas=True,
     )
+    add_routes(fmap, routes, trips, shapes)
+    if catchments:
+        for _, row in stations.iterrows():
+            folium.Circle(
+                [float(row["stop_lat"]), float(row["stop_lon"])],
+                radius=800,
+                color="#93C5FD",
+                weight=.7,
+                fill=True,
+                fill_color="#BFDBFE",
+                fill_opacity=.035,
+            ).add_to(fmap)
+    add_stations(fmap, stations)
+    return fmap
 
 
 def main() -> None:
@@ -385,13 +258,6 @@ def main() -> None:
     station_summary = load_parquet("station_summary.parquet")
     pair_summary = load_parquet("station_pair_summary.parquet")
 
-    if ridership.empty and od.empty:
-        st.error(
-            "Processed data files were not found. Run `python src/run_pipeline.py` "
-            "and redeploy the generated files."
-        )
-        st.stop()
-
     if not ridership.empty:
         ridership = ridership.copy()
         ridership["date"] = pd.to_datetime(ridership["date"])
@@ -399,736 +265,404 @@ def main() -> None:
         od = od.copy()
         od["date"] = pd.to_datetime(od["date"])
 
-    with st.sidebar:
-        st.markdown(
-            """
-            <div class="tp-brand">
-                <div class="tp-logo">TP</div>
-                <div>
-                    <div class="tp-brand-name">TransitPulse</div>
-                    <div class="tp-brand-sub">Klang Valley</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.caption("Explore the data")
-        st.divider()
-
-        if not ridership.empty:
-            min_date = ridership["date"].min().date()
-            max_date = ridership["date"].max().date()
-            selected_dates = st.date_input(
-                "Ridership period",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
-            )
-            if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
-                start_date, end_date = selected_dates
-            else:
-                start_date, end_date = min_date, max_date
-
-            services = sorted(ridership["service"].dropna().unique())
-            selected_services = st.multiselect(
-                "Transport services",
-                options=services,
-                default=services,
-            )
-            slider_max = max(3, min(12, len(services)))
-            top_n_services = st.slider(
-                "Services shown in overview",
-                min_value=3,
-                max_value=slider_max,
-                value=min(7, slider_max),
-            )
-        else:
-            min_date = max_date = None
-            start_date = end_date = None
-            services = []
-            selected_services = []
-            top_n_services = 7
-
-        st.divider()
-        st.caption("Ridership values represent recorded trips, not unique passengers.")
-        st.markdown(
-            "[GitHub repository](https://github.com/ckolavennu/TransitPulse-Klang-Valley)"
-        )
-
-    if not ridership.empty:
-        ridership_filtered = filter_by_date(ridership, "date", start_date, end_date)
-        if selected_services:
-            ridership_filtered = ridership_filtered[
-                ridership_filtered["service"].isin(selected_services)
-            ]
-        else:
-            ridership_filtered = ridership_filtered.iloc[0:0]
-    else:
-        ridership_filtered = pd.DataFrame()
-
-    service_count = ridership["service"].nunique() if not ridership.empty else 0
-    date_candidates = []
-    if not ridership.empty:
-        date_candidates.append(ridership["date"].max().date())
-    if not od.empty:
-        date_candidates.append(od["date"].max().date())
-    data_through = max(date_candidates) if date_candidates else "—"
-
-    render_hero(min_date or "—", max_date or "—", service_count, data_through)
-
-    navigation = st.radio(
-        "Dashboard navigation",
-        [
-            "Overview",
-            "Service Comparison",
-            "OD Explorer",
-            "Station Insights",
-            "Data & Method",
-        ],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-
-    if navigation == "Overview":
-        section_header(
-            "Network overview",
-            "A high-level view of demand across the selected period and services.",
-        )
-
-        if ridership_filtered.empty:
-            st.info("Select at least one service to view ridership analytics.")
-        else:
-            daily_total = (
-                ridership_filtered.groupby("date", as_index=False)["ridership"]
-                .sum()
-                .sort_values("date")
-            )
-            service_total = (
-                ridership_filtered.groupby("service", as_index=False)["ridership"]
-                .sum()
-                .sort_values("ridership", ascending=False)
-            )
-
-            total_trips = float(ridership_filtered["ridership"].sum())
-            average_daily = float(daily_total["ridership"].mean())
-            top_service = str(service_total.iloc[0]["service"]) if not service_total.empty else "—"
-            top_service_trips = float(service_total.iloc[0]["ridership"]) if not service_total.empty else 0.0
-            top_share = (top_service_trips / total_trips * 100) if total_trips > 0 else 0.0
-
-            peak_row = daily_total.loc[daily_total["ridership"].idxmax()]
-            peak_date = pd.to_datetime(peak_row["date"]).date()
-            peak_trips = float(peak_row["ridership"])
-
-            weekend_daily = ridership_filtered.groupby(
-                ["date", "is_weekend"], as_index=False
-            )["ridership"].sum()
-            weekday_avg = weekend_daily.loc[
-                weekend_daily["is_weekend"] == False, "ridership"
-            ].mean()
-            weekend_avg = weekend_daily.loc[
-                weekend_daily["is_weekend"] == True, "ridership"
-            ].mean()
-            weekend_delta = (
-                ((weekend_avg - weekday_avg) / weekday_avg * 100)
-                if pd.notna(weekday_avg) and weekday_avg
-                else None
-            )
-
-            cols = st.columns(4)
-            with cols[0]:
-                metric_card("Total trips", format_compact(total_trips), f"{start_date} → {end_date}")
-            with cols[1]:
-                metric_card("Average daily", format_compact(average_daily), "Across selected services")
-            with cols[2]:
-                metric_card("Top service", top_service, f"{format_percent(top_share)} of selected trips")
-            with cols[3]:
-                metric_card("Peak day", format_compact(peak_trips), str(peak_date))
-
-            section_header(
-                "What stands out",
-                "Automatically generated observations from the current filter selection.",
-            )
-            insight_cols = st.columns(3)
-            with insight_cols[0]:
-                insight_card(
-                    "Demand leader",
-                    f"{top_service} contributes {format_percent(top_share)} of trips within the current selection.",
-                )
-            with insight_cols[1]:
-                insight_card(
-                    "Peak demand",
-                    f"The busiest recorded day in this view is {peak_date}, with {format_compact(peak_trips)} trips.",
-                )
-            with insight_cols[2]:
-                if weekend_delta is None or pd.isna(weekend_delta):
-                    weekend_text = "There is not enough data to compare weekday and weekend demand."
-                elif weekend_delta < 0:
-                    weekend_text = f"Weekend daily demand averages {abs(weekend_delta):.1f}% lower than weekday demand."
-                else:
-                    weekend_text = f"Weekend daily demand averages {weekend_delta:.1f}% higher than weekday demand."
-                insight_card("Weekday pattern", weekend_text)
-
-            section_header(
-                "Ridership over time",
-                "The highest-volume selected services are prioritised for readability.",
-            )
-            monthly = (
-                ridership_filtered.groupby(["month", "service"], as_index=False)["ridership"]
-                .sum()
-                .sort_values("month")
-            )
-            top_services = service_total.head(top_n_services)["service"].tolist()
-            monthly_top = monthly[monthly["service"].isin(top_services)]
-
-            fig_monthly = px.line(
-                monthly_top,
-                x="month",
-                y="ridership",
-                color="service",
-                title=f"Monthly ridership trend · top {len(top_services)} services",
-                color_discrete_sequence=PALETTE,
-            )
-            fig_monthly.update_traces(line=dict(width=2.4))
-            fig_monthly = style_chart(fig_monthly, height=470, hovermode="x unified")
-            fig_monthly.update_yaxes(tickformat="~s", title_text="Trips")
-            fig_monthly.update_xaxes(title_text="")
-            st.plotly_chart(fig_monthly, use_container_width=True)
-
-            left, right = st.columns([1.2, 1])
-            with left:
-                fig_service = px.bar(
-                    service_total.head(10).sort_values("ridership"),
-                    x="ridership",
-                    y="service",
-                    orientation="h",
-                    title="Largest services by selected-period ridership",
-                    color="ridership",
-                    color_continuous_scale=["#BFDBFE", "#2563EB"],
-                )
-                fig_service.update_layout(coloraxis_showscale=False)
-                fig_service.update_yaxes(title_text="")
-                fig_service.update_xaxes(title_text="Trips", tickformat="~s")
-                fig_service = style_chart(fig_service, height=430)
-                st.plotly_chart(fig_service, use_container_width=True)
-
-            with right:
-                pie_data = service_total.head(7).copy()
-                if len(service_total) > 7:
-                    other_value = service_total.iloc[7:]["ridership"].sum()
-                    pie_data = pd.concat(
-                        [
-                            pie_data,
-                            pd.DataFrame([{"service": "Other selected", "ridership": other_value}]),
-                        ],
-                        ignore_index=True,
-                    )
-                fig_share = px.pie(
-                    pie_data,
-                    names="service",
-                    values="ridership",
-                    hole=0.64,
-                    title="Share of selected ridership",
-                    color_discrete_sequence=PALETTE,
-                )
-                fig_share.update_traces(
-                    textposition="inside",
-                    textinfo="percent",
-                    hovertemplate="<b>%{label}</b><br>%{value:,.0f} trips<br>%{percent}<extra></extra>",
-                )
-                fig_share = style_chart(fig_share, height=430)
-                st.plotly_chart(fig_share, use_container_width=True)
-
-    elif navigation == "Service Comparison":
-        section_header(
-            "Service comparison",
-            "Compare demand intensity, daily movement and weekday/weekend behaviour.",
-        )
-
-        if ridership_filtered.empty:
-            st.info("Select at least one service in the sidebar.")
-        else:
-            service_total = (
-                ridership_filtered.groupby("service", as_index=False)["ridership"]
-                .sum()
-                .sort_values("ridership", ascending=False)
-            )
-            default_focus = service_total.head(min(5, len(service_total)))["service"].tolist()
-            focus_services = st.multiselect(
-                "Services to compare closely",
-                options=service_total["service"].tolist(),
-                default=default_focus,
-                key="service_focus",
-            )
-
-            if not focus_services:
-                st.info("Choose at least one service to build the comparison.")
-            else:
-                comparison = ridership_filtered[
-                    ridership_filtered["service"].isin(focus_services)
-                ].copy()
-
-                rolling = st.toggle("Smooth daily trend with a 7-day average", value=True)
-                daily_service = (
-                    comparison.groupby(["date", "service"], as_index=False)["ridership"]
-                    .sum()
-                    .sort_values(["service", "date"])
-                )
-                if rolling:
-                    daily_service["ridership_display"] = daily_service.groupby("service")["ridership"].transform(
-                        lambda s: s.rolling(7, min_periods=1).mean()
-                    )
-                    y_col = "ridership_display"
-                    trend_title = "Daily demand · 7-day rolling average"
-                else:
-                    y_col = "ridership"
-                    trend_title = "Daily demand"
-
-                fig_daily = px.line(
-                    daily_service,
-                    x="date",
-                    y=y_col,
-                    color="service",
-                    title=trend_title,
-                    color_discrete_sequence=PALETTE,
-                )
-                fig_daily.update_traces(line=dict(width=2.3))
-                fig_daily.update_xaxes(title_text="")
-                fig_daily.update_yaxes(title_text="Trips", tickformat="~s")
-                fig_daily = style_chart(fig_daily, height=455, hovermode="x unified")
-                st.plotly_chart(fig_daily, use_container_width=True)
-
-                left, right = st.columns(2)
-                with left:
-                    weekday_summary = comparison.groupby(
-                        ["service", "is_weekend"], as_index=False
-                    )["ridership"].mean()
-                    weekday_summary["day_type"] = weekday_summary["is_weekend"].map(
-                        {True: "Weekend", False: "Weekday"}
-                    )
-                    fig_weekday = px.bar(
-                        weekday_summary,
-                        x="service",
-                        y="ridership",
-                        color="day_type",
-                        barmode="group",
-                        title="Average day · weekday vs weekend",
-                        color_discrete_map={"Weekday": ACCENT, "Weekend": ACCENT_2},
-                    )
-                    fig_weekday.update_xaxes(title_text="", tickangle=-20)
-                    fig_weekday.update_yaxes(title_text="Average trips", tickformat="~s")
-                    fig_weekday = style_chart(fig_weekday, height=420)
-                    st.plotly_chart(fig_weekday, use_container_width=True)
-
-                with right:
-                    monthly_service = comparison.groupby(
-                        ["month", "service"], as_index=False
-                    )["ridership"].sum()
-                    monthly_rank = monthly_service.groupby(
-                        "service", as_index=False
-                    )["ridership"].mean().sort_values("ridership", ascending=True)
-                    fig_rank = px.bar(
-                        monthly_rank,
-                        x="ridership",
-                        y="service",
-                        orientation="h",
-                        title="Average monthly ridership",
-                        color="ridership",
-                        color_continuous_scale=["#CFFAFE", "#0891B2"],
-                    )
-                    fig_rank.update_layout(coloraxis_showscale=False)
-                    fig_rank.update_xaxes(title_text="Average monthly trips", tickformat="~s")
-                    fig_rank.update_yaxes(title_text="")
-                    fig_rank = style_chart(fig_rank, height=420)
-                    st.plotly_chart(fig_rank, use_container_width=True)
-
-                section_header(
-                    "Service summary",
-                    "Totals for the full sidebar selection, not only the focused comparison.",
-                )
-                summary_table = service_total.rename(
-                    columns={"service": "Service", "ridership": "Trips"}
-                ).copy()
-                summary_table["Share"] = (
-                    summary_table["Trips"] / summary_table["Trips"].sum() * 100
-                ).round(2)
-                st.dataframe(
-                    summary_table,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Trips": st.column_config.NumberColumn(format="%,d"),
-                        "Share": st.column_config.NumberColumn(format="%.2f%%"),
-                    },
-                )
-                make_download_button(summary_table, "Download service summary", "service_summary.csv")
-
-    elif navigation == "OD Explorer":
-        section_header(
-            "Origin–destination explorer",
-            "See which Rapid Rail station pairs carry the strongest recorded flows.",
-        )
-
-        if od.empty:
-            st.info("Origin–destination data is not available.")
-        else:
-            od_min = od["date"].min().date()
-            od_max = od["date"].max().date()
-
-            controls = st.columns([1.3, 1, 1])
-            with controls[0]:
-                od_dates = st.date_input(
-                    "OD period",
-                    value=(od_min, od_max),
-                    min_value=od_min,
-                    max_value=od_max,
-                    key="od_dates",
-                )
-            with controls[1]:
-                top_n = st.slider("Pairs shown", 10, 50, 20)
-            with controls[2]:
-                min_trips = st.number_input(
-                    "Minimum aggregate trips",
-                    min_value=0,
-                    value=0,
-                    step=1000,
-                )
-
-            if isinstance(od_dates, tuple) and len(od_dates) == 2:
-                od_start, od_end = od_dates
-            else:
-                od_start, od_end = od_min, od_max
-
-            od_filtered = filter_by_date(od, "date", od_start, od_end)
-            pair_filtered = (
-                od_filtered.groupby(
-                    ["origin_code", "origin_name", "destination_code", "destination_name"],
-                    dropna=False,
-                    as_index=False,
-                )["ridership"]
-                .sum()
-                .sort_values("ridership", ascending=False)
-            )
-            pair_filtered = pair_filtered[pair_filtered["ridership"] >= min_trips]
-
-            if pair_filtered.empty:
-                st.info("No station pairs match the current controls.")
-            else:
-                total_od = float(pair_filtered["ridership"].sum())
-                top_pair = pair_filtered.iloc[0]
-                unique_origins = int(pair_filtered["origin_name"].nunique())
-
-                cards = st.columns(4)
-                with cards[0]:
-                    metric_card("OD trips", format_compact(total_od), f"{od_start} → {od_end}")
-                with cards[1]:
-                    metric_card("Station pairs", f"{len(pair_filtered):,}", "After minimum-trip filter")
-                with cards[2]:
-                    metric_card("Origins", f"{unique_origins:,}", "Unique origin stations")
-                with cards[3]:
-                    metric_card(
-                        "Top flow",
-                        format_compact(top_pair["ridership"]),
-                        f"{top_pair['origin_name']} → {top_pair['destination_name']}",
-                    )
-
-                display_pairs = pair_filtered.head(top_n).copy()
-                display_pairs["station_pair"] = (
-                    display_pairs["origin_name"].astype(str)
-                    + " → "
-                    + display_pairs["destination_name"].astype(str)
-                )
-
-                fig_pairs = px.bar(
-                    display_pairs.sort_values("ridership"),
-                    x="ridership",
-                    y="station_pair",
-                    orientation="h",
-                    title=f"Busiest station-to-station flows · top {len(display_pairs)}",
-                    color="ridership",
-                    color_continuous_scale=["#CFFAFE", "#2563EB"],
-                )
-                fig_pairs.update_layout(coloraxis_showscale=False)
-                fig_pairs.update_xaxes(title_text="Trips", tickformat="~s")
-                fig_pairs.update_yaxes(title_text="")
-                fig_pairs = style_chart(fig_pairs, height=max(500, len(display_pairs) * 25))
-                st.plotly_chart(fig_pairs, use_container_width=True)
-
-                origin_summary = (
-                    od_filtered.groupby("origin_name", as_index=False)["ridership"]
-                    .sum()
-                    .sort_values("ridership", ascending=False)
-                    .head(12)
-                )
-                destination_summary = (
-                    od_filtered.groupby("destination_name", as_index=False)["ridership"]
-                    .sum()
-                    .sort_values("ridership", ascending=False)
-                    .head(12)
-                )
-
-                left, right = st.columns(2)
-                with left:
-                    fig_origins = px.bar(
-                        origin_summary.sort_values("ridership"),
-                        x="ridership",
-                        y="origin_name",
-                        orientation="h",
-                        title="Top origin stations",
-                        color="ridership",
-                        color_continuous_scale=["#DBEAFE", "#2563EB"],
-                    )
-                    fig_origins.update_layout(coloraxis_showscale=False)
-                    fig_origins.update_xaxes(title_text="Outbound trips", tickformat="~s")
-                    fig_origins.update_yaxes(title_text="")
-                    fig_origins = style_chart(fig_origins, height=430)
-                    st.plotly_chart(fig_origins, use_container_width=True)
-
-                with right:
-                    fig_destinations = px.bar(
-                        destination_summary.sort_values("ridership"),
-                        x="ridership",
-                        y="destination_name",
-                        orientation="h",
-                        title="Top destination stations",
-                        color="ridership",
-                        color_continuous_scale=["#CCFBF1", "#0F766E"],
-                    )
-                    fig_destinations.update_layout(coloraxis_showscale=False)
-                    fig_destinations.update_xaxes(title_text="Inbound trips", tickformat="~s")
-                    fig_destinations.update_yaxes(title_text="")
-                    fig_destinations = style_chart(fig_destinations, height=430)
-                    st.plotly_chart(fig_destinations, use_container_width=True)
-
-                with st.expander("View station-pair table"):
-                    table = display_pairs[
-                        ["origin_name", "destination_name", "ridership"]
-                    ].rename(
-                        columns={
-                            "origin_name": "Origin",
-                            "destination_name": "Destination",
-                            "ridership": "Trips",
-                        }
-                    )
-                    st.dataframe(
-                        table,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={"Trips": st.column_config.NumberColumn(format="%,d")},
-                    )
-                    make_download_button(table, "Download displayed pairs", "top_station_pairs.csv")
-
-    elif navigation == "Station Insights":
-        section_header(
-            "Station profile",
-            "Follow the inbound and outbound travel relationships of a selected Rapid Rail station.",
-        )
-
-        if station_summary.empty or od.empty:
-            st.info("Station-level data is not available.")
-        else:
-            stations = sorted(station_summary["station_name"].dropna().unique())
-            selected_station = st.selectbox("Choose a station", stations, key="station_select")
-
-            station_row = station_summary[
-                station_summary["station_name"] == selected_station
-            ].head(1)
-
-            if station_row.empty:
-                st.info("No summary data was found for this station.")
-            else:
-                row = station_row.iloc[0]
-                activity_sorted = station_summary.sort_values(
-                    "total_station_activity", ascending=False
-                ).reset_index(drop=True)
-                rank_rows = activity_sorted.index[
-                    activity_sorted["station_name"] == selected_station
-                ].tolist()
-                rank = rank_rows[0] + 1 if rank_rows else None
-
-                outbound = float(row["outbound_trips"])
-                inbound = float(row["inbound_trips"])
-                total_activity = float(row["total_station_activity"])
-                balance = ((outbound - inbound) / total_activity * 100) if total_activity else 0.0
-
-                cards = st.columns(4)
-                with cards[0]:
-                    metric_card("Outbound", format_compact(outbound), "Trips starting here")
-                with cards[1]:
-                    metric_card("Inbound", format_compact(inbound), "Trips ending here")
-                with cards[2]:
-                    metric_card("Total activity", format_compact(total_activity), "Inbound + outbound")
-                with cards[3]:
-                    metric_card(
-                        "Activity rank",
-                        f"#{rank}" if rank is not None else "—",
-                        f"Among {len(activity_sorted)} stations",
-                    )
-
-                if abs(balance) < 2:
-                    balance_text = f"{selected_station} is closely balanced between inbound and outbound activity."
-                elif balance > 0:
-                    balance_text = (
-                        f"{selected_station} records more outbound than inbound activity "
-                        f"({abs(balance):.1f}% net outbound tilt)."
-                    )
-                else:
-                    balance_text = (
-                        f"{selected_station} records more inbound than outbound activity "
-                        f"({abs(balance):.1f}% net inbound tilt)."
-                    )
-
-                section_header("Station signal")
-                insight_card("Flow balance", balance_text)
-
-                outgoing = (
-                    od[od["origin_name"] == selected_station]
-                    .groupby("destination_name", as_index=False)["ridership"]
-                    .sum()
-                    .sort_values("ridership", ascending=False)
-                    .head(12)
-                )
-                incoming = (
-                    od[od["destination_name"] == selected_station]
-                    .groupby("origin_name", as_index=False)["ridership"]
-                    .sum()
-                    .sort_values("ridership", ascending=False)
-                    .head(12)
-                )
-
-                left, right = st.columns(2)
-                with left:
-                    fig_out = px.bar(
-                        outgoing.sort_values("ridership"),
-                        x="ridership",
-                        y="destination_name",
-                        orientation="h",
-                        title=f"Where riders go from {selected_station}",
-                        color="ridership",
-                        color_continuous_scale=["#DBEAFE", "#2563EB"],
-                    )
-                    fig_out.update_layout(coloraxis_showscale=False)
-                    fig_out.update_xaxes(title_text="Outbound trips", tickformat="~s")
-                    fig_out.update_yaxes(title_text="")
-                    fig_out = style_chart(fig_out, height=455)
-                    st.plotly_chart(fig_out, use_container_width=True)
-
-                with right:
-                    fig_in = px.bar(
-                        incoming.sort_values("ridership"),
-                        x="ridership",
-                        y="origin_name",
-                        orientation="h",
-                        title="Where riders arrive from",
-                        color="ridership",
-                        color_continuous_scale=["#CCFBF1", "#0F766E"],
-                    )
-                    fig_in.update_layout(coloraxis_showscale=False)
-                    fig_in.update_xaxes(title_text="Inbound trips", tickformat="~s")
-                    fig_in.update_yaxes(title_text="")
-                    fig_in = style_chart(fig_in, height=455)
-                    st.plotly_chart(fig_in, use_container_width=True)
-
-                with st.expander("View station flow tables"):
-                    left, right = st.columns(2)
-                    with left:
-                        st.caption("Top destinations")
-                        st.dataframe(
-                            outgoing.rename(columns={"destination_name": "Destination", "ridership": "Trips"}),
-                            use_container_width=True,
-                            hide_index=True,
-                        )
-                    with right:
-                        st.caption("Top origins")
-                        st.dataframe(
-                            incoming.rename(columns={"origin_name": "Origin", "ridership": "Trips"}),
-                            use_container_width=True,
-                            hide_index=True,
-                        )
-
-    else:
-        section_header(
-            "Data & methodology",
-            "What the dashboard measures, where the data comes from, and how to interpret it.",
-        )
-
-        st.markdown(
-            """
-            <div class="tp-callout">
-                <strong>What TransitPulse currently measures</strong><br><br>
-                Historical public transport ridership, service-level demand, Rapid Rail
-                origin–destination flows, and station-level inbound/outbound activity.
-                The project is designed as a demand-intelligence dashboard; it does not
-                currently claim to measure delays, cancellations or operational reliability.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        left, right = st.columns(2)
-        with left:
-            st.subheader("Data sources")
-            st.markdown(
-                """
-                **Daily Public Transport Ridership**  
-                Malaysia's official open-data portal, data.gov.my.
-
-                **Rapid Rail Daily Origin–Destination Ridership**  
-                Station-to-station ridership records for the Klang Valley Rapid Rail network.
-
-                [Open ridership dataset](https://data.gov.my/data-catalogue/ridership_headline)  
-                [Open Rapid Rail OD dataset](https://data.gov.my/data-catalogue/ridership_od_rapidrail_daily)
-                """
-            )
-
-        with right:
-            st.subheader("Interpretation")
-            st.markdown(
-                """
-                - **Ridership means trips, not unique passengers.**
-                - A single traveller can contribute multiple trips.
-                - OD records describe station-to-station movements; transfers may form part of a longer journey.
-                - Current outputs are descriptive analytics, not causal claims.
-                """
-            )
-
-        section_header("Processed data health")
-        file_status = pd.DataFrame(
-            [
-                {"Dataset": "Daily ridership (long)", "Available": not ridership.empty, "Rows": len(ridership)},
-                {"Dataset": "Rapid Rail OD", "Available": not od.empty, "Rows": len(od)},
-                {"Dataset": "Station summary", "Available": not station_summary.empty, "Rows": len(station_summary)},
-                {"Dataset": "Station-pair summary", "Available": not pair_summary.empty, "Rows": len(pair_summary)},
-            ]
-        )
-        st.dataframe(
-            file_status,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Available": st.column_config.CheckboxColumn(),
-                "Rows": st.column_config.NumberColumn(format="%,d"),
-            },
-        )
-
-        st.markdown(
-            """
-            <div class="tp-callout">
-                <strong>Next analytical layer</strong><br>
-                Station mapping, catchment-area analysis and a transparent Transit
-                Accessibility Score are planned as the next major expansion.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    error = None
+    try:
+        with st.spinner("Loading Klang Valley rail network…"):
+            stops, routes, trips, shapes = gtfs()
+        stations = build_station_metrics(stops, routes, station_summary)
+    except Exception as exc:
+        stops = routes = trips = shapes = stations = pd.DataFrame()
+        error = str(exc)
 
     st.markdown(
         """
-        <div class="tp-footer">
-            TransitPulse Klang Valley · Built with Python, Plotly and Streamlit · Official Malaysian open transport data
-        </div>
-        """,
+<section class="tp-hero">
+<div class="eyebrow">Transit accessibility + demand intelligence</div>
+<h1>How well does public transport serve you — and the city?</h1>
+<p>TransitPulse turns Klang Valley rail geography and observed travel demand into two practical views: understand the rail access around a place you care about, or step back and see where network demand and accessibility do not align.</p>
+</section>
+<div class="tp-grid">
+<div class="tp-purpose"><div class="k">For commuters</div><div class="t">Would this area work for me without a car?</div><div class="c">Pick a station or click anywhere on the map. See the nearest rail access, walking-distance proxy, nearby lines, direct network reach, station demand and common destinations.</div></div>
+<div class="tp-purpose"><div class="k">For planners & analysts</div><div class="t">Where is demand stronger than network access?</div><div class="c">Compare observed demand with connectivity and nearby rail options, explore catchment coverage, and surface high-demand stations that merit closer review.</div></div>
+</div>
+""",
         unsafe_allow_html=True,
     )
+
+    if error:
+        st.error(
+            "The official GTFS feed could not be loaded, so accessibility views are "
+            f"temporarily unavailable. Demand evidence still works. Detail: {error}"
+        )
+
+    commuter, network, evidence, methodology = st.tabs(
+        ["📍 Explore My Area", "🗺️ Network Explorer", "📊 Demand Evidence", "🧭 Methodology"]
+    )
+
+    with commuter:
+        section(
+            "Commuter explorer",
+            "Start with a place, not a chart.",
+            "Choose a station or click a location. TransitPulse estimates how easy it is to reach and use the rail network from there.",
+        )
+        if stations.empty:
+            st.info("Rail network data is unavailable right now.")
+        else:
+            mode = st.radio(
+                "How do you want to explore?",
+                ["Choose a station", "Click a location on the map"],
+                horizontal=True,
+            )
+            location = None
+            selected_code = None
+
+            if mode == "Choose a station":
+                label = st.selectbox(
+                    "Search for a Rapid Rail station",
+                    stations.sort_values("station_label")["station_label"].tolist(),
+                    index=None,
+                    placeholder="Example: SP17: Bukit Jalil",
+                )
+                if label:
+                    row = stations[stations["station_label"] == label].iloc[0]
+                    location = (float(row["stop_lat"]), float(row["stop_lon"]))
+                    selected_code = str(row["station_code"])
+                st_folium(
+                    commuter_map(stations, routes, trips, shapes, location, selected_code),
+                    width=1250,
+                    height=510,
+                    key="station_map",
+                )
+            else:
+                st.session_state.setdefault("tp_clicked", None)
+                location = st.session_state["tp_clicked"]
+                state = st_folium(
+                    commuter_map(stations, routes, trips, shapes, location),
+                    width=1250,
+                    height=540,
+                    key="click_map",
+                )
+                clicked = state.get("last_clicked") if state else None
+                if clicked:
+                    candidate = (float(clicked["lat"]), float(clicked["lng"]))
+                    old = st.session_state.get("tp_clicked")
+                    if old is None or abs(old[0]-candidate[0]) > 1e-6 or abs(old[1]-candidate[1]) > 1e-6:
+                        st.session_state["tp_clicked"] = candidate
+                        st.rerun()
+                if location is None:
+                    st.info("Click anywhere on the map to assess rail access around that location.")
+
+            if location is not None:
+                result = score_location(location[0], location[1], stations)
+                nearest = result["nearest"]
+                metrics(
+                    [
+                        ("Accessibility score", f"{result['accessibility_score']:.0f}/100", "Transparent composite score; see Methodology."),
+                        ("Nearest station", str(nearest["station_name"]), f"{result['nearest_distance_km']*1000:,.0f} m straight-line distance."),
+                        ("Rail lines nearby", str(result["line_count"]), "Within the 800 m proxy, or at the nearest station."),
+                        ("Direct rail reach", f"{result['direct_reach']} stops", "Reach before considering line transfers."),
+                    ]
+                )
+
+                score = result["accessibility_score"]
+                verdict = (
+                    "This location has strong rail access in the current model."
+                    if score >= 75
+                    else "This location has moderate rail access; proximity or network choice is weaker than the best-connected areas."
+                    if score >= 50
+                    else "This location has relatively weak rail access in the current model."
+                )
+                st.markdown(
+                    f'<div class="tp-insight"><strong>What this means:</strong> {escape(verdict)}</div>',
+                    unsafe_allow_html=True,
+                )
+
+                left, right = st.columns([1.05, 1])
+                with left:
+                    st.subheader("What is within reach?")
+                    nearby = result["within_1500"].copy()
+                    if nearby.empty:
+                        st.write("No Rapid Rail station is within 1.5 km of this point.")
+                    else:
+                        nearby["Distance (m)"] = (nearby["distance_km"] * 1000).round().astype(int)
+                        view = nearby[
+                            ["station_label", "Distance (m)", "accessibility_score", "demand_score"]
+                        ].rename(
+                            columns={
+                                "station_label": "Station",
+                                "accessibility_score": "Station access",
+                                "demand_score": "Demand percentile",
+                            }
+                        )
+                        st.dataframe(view.head(12), hide_index=True, use_container_width=True)
+
+                    if result["route_labels"]:
+                        pills = "".join(
+                            f'<span class="pill">{escape(x)}</span>'
+                            for x in result["route_labels"]
+                        )
+                        st.markdown(f"<strong>Nearby lines</strong><br>{pills}", unsafe_allow_html=True)
+
+                with right:
+                    st.subheader(f"Where people travel from {nearest['station_name']}")
+                    if od.empty:
+                        st.write("OD demand data is unavailable.")
+                    else:
+                        code = str(nearest["station_code"]).upper()
+                        outgoing = (
+                            od[od["origin_code"].astype(str).str.upper() == code]
+                            .groupby("destination_name", as_index=False)["ridership"]
+                            .sum().sort_values("ridership", ascending=False).head(8)
+                        )
+                        if outgoing.empty:
+                            outgoing = (
+                                od[od["origin_name"].map(normalize_station_name) == normalize_station_name(nearest["station_name"])]
+                                .groupby("destination_name", as_index=False)["ridership"]
+                                .sum().sort_values("ridership", ascending=False).head(8)
+                            )
+                        if outgoing.empty:
+                            st.write("No matching OD demand was found for this station.")
+                        else:
+                            fig = px.bar(
+                                outgoing.sort_values("ridership"),
+                                x="ridership",
+                                y="destination_name",
+                                orientation="h",
+                                labels={"ridership": "Trips", "destination_name": ""},
+                                color_discrete_sequence=[ACCENT],
+                                title="Top observed destinations",
+                            )
+                            style_chart(fig, 390)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                st.markdown(
+                    '<div class="tp-note"><strong>Walking-distance note.</strong> '
+                    "The 800 m circle is a straight-line catchment proxy, not a routed walking path. "
+                    "Roads, crossings, entrances, elevation and barriers are not yet modelled.</div>",
+                    unsafe_allow_html=True,
+                )
+
+    with network:
+        section(
+            "Network & planning explorer",
+            "Where does observed demand outpace station-level access?",
+            "Compare 2026 OD demand with station access based on nearby lines, direct rail reach and surrounding station density. This is a screening tool, not a claim of a transit desert.",
+        )
+        if stations.empty:
+            st.info("Rail network data is unavailable right now.")
+        else:
+            latest = od["date"].max().date() if not od.empty else None
+            review_count = int((stations["quadrant"] == "High demand / lower access").sum())
+            metrics(
+                [
+                    ("Rapid Rail stops", f"{len(stations):,}", "GTFS stop records in the model."),
+                    ("Rail routes", f"{routes['route_id'].nunique()}", "Official Rapid Rail KL GTFS feed."),
+                    ("Priority-review stations", str(review_count), "High demand in the lower half of the access ranking."),
+                    ("Demand data through", str(latest) if latest else "—", "Latest committed Rapid Rail OD date."),
+                ]
+            )
+
+            left, right = st.columns([1.05, 1])
+            with left:
+                st.subheader("Demand vs accessibility")
+                scatter = stations[stations["total_station_activity"] > 0].copy()
+                fig = px.scatter(
+                    scatter,
+                    x="access_percentile",
+                    y="demand_score",
+                    size="total_station_activity",
+                    size_max=26,
+                    color="quadrant",
+                    color_discrete_map=QUADRANT_COLORS,
+                    hover_name="station_label",
+                    hover_data={
+                        "total_station_activity": ":,.0f",
+                        "accessibility_score": True,
+                        "line_count": True,
+                        "direct_reach": True,
+                        "gap_score": True,
+                        "quadrant": False,
+                    },
+                    labels={
+                        "access_percentile": "Accessibility percentile",
+                        "demand_score": "Demand percentile",
+                        "total_station_activity": "Observed station activity",
+                        "accessibility_score": "Accessibility score",
+                        "line_count": "Nearby lines",
+                        "direct_reach": "Direct rail reach",
+                        "gap_score": "Demand-access gap",
+                    },
+                )
+                fig.add_vline(x=50, line_dash="dot", line_color="#94A3B8")
+                fig.add_hline(y=50, line_dash="dot", line_color="#94A3B8")
+                style_chart(fig, 500)
+                fig.update_layout(legend=dict(orientation="h", y=-.18))
+                st.plotly_chart(fig, use_container_width=True)
+
+            with right:
+                st.subheader("Stations to review first")
+                priority = (
+                    stations[stations["quadrant"] == "High demand / lower access"]
+                    .sort_values(["gap_score", "demand_score"], ascending=False)
+                    .head(12)
+                )
+                view = priority[
+                    ["station_label", "demand_score", "access_percentile", "accessibility_score", "gap_score", "line_count", "direct_reach"]
+                ].rename(
+                    columns={
+                        "station_label": "Station",
+                        "demand_score": "Demand",
+                        "access_percentile": "Access rank",
+                        "accessibility_score": "Access score",
+                        "gap_score": "Gap",
+                        "line_count": "Lines",
+                        "direct_reach": "Direct reach",
+                    }
+                )
+                st.dataframe(view, hide_index=True, use_container_width=True, height=420)
+                st.markdown(
+                    '<div class="tp-note">A larger gap means the station\'s demand percentile '
+                    "ranks higher than its accessibility percentile. This is a prompt for investigation, "
+                    "not proof that a neighbourhood is underserved.</div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.subheader("Explore the network geographically")
+            catchments = st.toggle("Show 800 m station catchment proxies", value=False)
+            st_folium(
+                network_map(stations, routes, trips, shapes, catchments),
+                width=1250,
+                height=610,
+                key=f"network_{catchments}",
+            )
+            cols = st.columns(4)
+            for col, (label, color) in zip(cols, QUADRANT_COLORS.items()):
+                col.markdown(f"<span style='color:{color};font-size:1.1rem'>●</span> {escape(label)}", unsafe_allow_html=True)
+
+    with evidence:
+        section(
+            "Demand evidence",
+            "The charts are evidence — not the product.",
+            "Inspect the historical ridership and origin-destination data that support the commuter and network views.",
+        )
+        if ridership.empty:
+            st.info("Ridership data is unavailable.")
+        else:
+            min_date, max_date = ridership["date"].min().date(), ridership["date"].max().date()
+            a, b = st.columns([1, 1.5])
+            with a:
+                date_range = st.date_input(
+                    "Ridership date range",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="evidence_dates",
+                )
+            with b:
+                service_options = sorted(ridership["service"].dropna().unique())
+                selected = st.multiselect(
+                    "Services", service_options, default=service_options, key="evidence_services"
+                )
+            start, end = date_range if isinstance(date_range, tuple) and len(date_range) == 2 else (min_date, max_date)
+            filtered = ridership[
+                (ridership["date"].dt.date >= start) & (ridership["date"].dt.date <= end)
+            ]
+            if selected:
+                filtered = filtered[filtered["service"].isin(selected)]
+
+            if filtered.empty:
+                st.info("No ridership records match the filters.")
+            else:
+                totals = filtered.groupby("service", as_index=False)["ridership"].sum().sort_values("ridership", ascending=False)
+                monthly = filtered.groupby(["month", "service"], as_index=False)["ridership"].sum().sort_values("month")
+                monthly = monthly[monthly["service"].isin(totals.head(7)["service"])]
+                left, right = st.columns([1.25, 1])
+                with left:
+                    fig = px.line(
+                        monthly, x="month", y="ridership", color="service",
+                        color_discrete_sequence=PALETTE,
+                        labels={"month": "", "ridership": "Trips", "service": ""},
+                        title="Monthly ridership — leading selected services",
+                    )
+                    style_chart(fig, 460)
+                    st.plotly_chart(fig, use_container_width=True)
+                with right:
+                    fig = px.bar(
+                        totals.head(10).sort_values("ridership"),
+                        x="ridership", y="service", orientation="h",
+                        color_discrete_sequence=[ACCENT],
+                        labels={"ridership": "Trips", "service": ""},
+                        title="Total trips by service",
+                    )
+                    style_chart(fig, 460)
+                    st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+        st.subheader("High-volume station-to-station movements")
+        if pair_summary.empty:
+            st.info("Station-pair summary is unavailable.")
+        else:
+            pairs = pair_summary.head(12).copy()
+            pairs["pair"] = pairs["origin_name"] + " → " + pairs["destination_name"]
+            fig = px.bar(
+                pairs.sort_values("ridership"), x="ridership", y="pair",
+                orientation="h", color_discrete_sequence=[CYAN],
+                labels={"ridership": "Trips", "pair": ""},
+            )
+            style_chart(fig, 500)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with methodology:
+        section(
+            "Methodology",
+            "What TransitPulse measures — and what it does not.",
+            "The scoring system is intentionally visible so the model can be challenged and improved rather than hidden behind one number.",
+        )
+        st.markdown(
+            """
+### Location Accessibility Score
+- **45% proximity** — straight-line distance to the nearest Rapid Rail stop, tapering to zero at 2 km.
+- **20% line choice** — rail lines available within the 800 m proxy, or at the nearest station if none fall inside it.
+- **25% direct rail reach** — stops reachable on nearby lines before transfers.
+- **10% station density** — stops inside the 800 m proxy.
+
+### Station Accessibility
+Station access is calculated **without ridership** using nearby line choice, direct reach and nearby-station density. This keeps network access independent from observed usage.
+
+### Demand Score
+Demand is the percentile rank of observed 2026 Rapid Rail station activity (inbound + outbound OD trips).
+
+### Demand–Access Gap
+`max(0, Demand percentile - Accessibility percentile)`
+
+The gap is a **screening indicator**. It highlights stations where observed use ranks higher than relative network access; it is not a definitive transit-desert measure.
+
+### What a stronger underserved-area model still needs
+Population and employment density, routed pedestrian distance, feeder-bus access, service frequency, operating hours and socioeconomic/mobility-need indicators.
+"""
+        )
+        st.markdown("### Data sources")
+        st.markdown(
+            f"- [Daily public transport ridership]({RIDERSHIP_SOURCE}) — data.gov.my\n"
+            f"- [Rapid Rail daily OD ridership]({OD_SOURCE}) — data.gov.my\n"
+            f"- [GTFS Static documentation]({GTFS_DOCS}) — official Malaysia Open API\n"
+            f"- GTFS endpoint used by the app: `{GTFS_URL}`"
+        )
+        if not stations.empty:
+            metrics(
+                [
+                    ("GTFS stops loaded", str(len(stations)), "Rapid Rail KL network."),
+                    ("GTFS routes loaded", str(routes["route_id"].nunique()), "Official static feed."),
+                    ("Stops matched to demand", str(int((stations["total_station_activity"] > 0).sum())), "Matched by station code or name."),
+                    ("GTFS cache", "24 hours", "Avoids unnecessary repeated API requests."),
+                ]
+            )
+        st.markdown(
+            '<div class="tp-note"><strong>Interpretation rule:</strong> Ridership values represent trips, '
+            "not unique passengers. OD journeys can span line transfers, so they should not be used to infer "
+            "line-specific ridership.</div>",
+            unsafe_allow_html=True,
+        )
 
 
 if __name__ == "__main__":
