@@ -6,6 +6,14 @@ The aim is to turn public transport data into a clear, interactive dashboard tha
 
 ---
 
+## Live Dashboard
+
+View the deployed dashboard here:
+
+[TransitPulse Klang Valley Dashboard](https://transitpulse-klang.streamlit.app/)
+
+---
+
 ## Project Objectives
 
 This project focuses on three main questions:
@@ -108,7 +116,7 @@ transitpulse_klang_valley/
 Clone the repository and move into the project folder:
 
 ```bash
-cd transitpulse_klang_valley
+cd TransitPulse-Klang-Valley
 ```
 
 Create a virtual environment:
@@ -145,7 +153,7 @@ streamlit run dashboard/app.py
 
 ## Current Status
 
-The current version is a working MVP. It successfully loads official ridership data, creates processed analytical outputs, and displays them in a Streamlit dashboard.
+The current version is a working MVP. It successfully loads official ridership data, creates processed analytical outputs, and displays them in a deployed Streamlit dashboard.
 
 Completed:
 
@@ -156,6 +164,7 @@ Completed:
 - Streamlit dashboard MVP created
 - Dashboard V2 layout added
 - Overview, service comparison, OD explorer, station insights, and data notes pages working
+- Dashboard deployed on Streamlit Community Cloud
 
 ---
 
@@ -169,8 +178,7 @@ Next improvements include:
 4. Add station map using GTFS Static stop data
 5. Build station catchment area analysis
 6. Create a Transit Accessibility Score
-7. Deploy dashboard on Streamlit Community Cloud
-8. Add a portfolio case study page
+7. Add a portfolio case study page
 
 ---
 
