@@ -1,100 +1,250 @@
 # TransitPulse Klang Valley
 
-TransitPulse Klang Valley is a data analytics dashboard that explores public transport ridership and origin-destination demand across the Klang Valley. The project uses official Malaysian open transport data to identify usage patterns, busy services, high-demand station pairs, and station-level travel flows.
+**TransitPulse Klang Valley** is an interactive rail-accessibility and transport-demand project for the Klang Valley.
 
-The aim is to turn public transport data into a clear, interactive dashboard that can support mobility analysis, portfolio storytelling, and future accessibility research.
+**Live app:** https://transitpulse-klang.streamlit.app/
 
----
+The project is built around two practical questions:
 
-## Live Dashboard
+1. **For commuters:** *How well does public transport serve a place I care about?*
+2. **For planners and analysts:** *Where does observed rail demand appear stronger than station-level network access?*
 
-View the deployed dashboard here:
-
-[TransitPulse Klang Valley Dashboard](https://transitpulse-klang.streamlit.app/)
-
----
-
-## Project Objectives
-
-This project focuses on three main questions:
-
-1. How has public transport ridership changed over time?
-2. Which services carry the highest number of trips?
-3. Which Rapid Rail station pairs and stations generate the strongest travel demand?
-
-Future versions may expand into station mapping, catchment areas, and a Transit Accessibility Score.
+Rather than treating charts as the product, TransitPulse uses ridership, origin-destination demand and official GTFS network data as evidence behind an interactive accessibility experience.
 
 ---
 
-## Current Dashboard Features
+## What the app does
 
-The current Streamlit dashboard includes:
+### 📍 Explore My Area
 
-- Ridership overview KPIs
-- Date range filtering
-- Service filtering
-- Monthly ridership trend analysis
-- Top services by total ridership
-- Ridership share by service
-- Service comparison view
-- Rapid Rail origin-destination explorer
-- Top origin and destination stations
-- Station-level insights
-- Data notes and limitations
-- Downloadable filtered data tables
+Choose a Rapid Rail station or click a location on the map to see:
 
----
+- nearest Rapid Rail station
+- straight-line distance to rail
+- an 800 m station-access catchment proxy
+- nearby rail lines
+- direct rail reach before transfers
+- nearby stations within 1.5 km
+- a location-level **Accessibility Score**
+- observed top destinations from the nearest station
 
-## Data Sources
+The goal is not to replace Google Maps or a journey planner. TransitPulse answers a different question:
 
-This project currently uses official public transport datasets from Malaysia's open data portal, data.gov.my.
+> **How good is the rail access around this place?**
 
-### 1. Daily Public Transport Ridership
+### 🗺️ Network Explorer
 
-This dataset provides daily ridership figures for multiple public transport services in Malaysia, including services such as LRT, MRT, Monorail, Rapid Bus, KTM, ETS, and others.
+Explore the Klang Valley rail network as a planning/analysis layer:
 
-Source page:  
-https://data.gov.my/data-catalogue/ridership_headline
+- official Rapid Rail station geography and route shapes
+- station-level accessibility
+- observed 2026 OD demand
+- demand vs accessibility quadrant analysis
+- station catchment proxies
+- a **Demand–Access Gap** for screening stations that merit closer review
 
-Direct CSV source:  
-https://storage.data.gov.my/transportation/ridership_headline.csv
+The gap is deliberately presented as a screening indicator, **not** as proof that an area is a transit desert.
 
-### 2. Daily Origin-Destination Ridership: Rapid Rail Klang Valley
+### 📊 Demand Evidence
 
-This dataset provides daily station-to-station ridership for the Rapid Rail network in Klang Valley. It includes the date, origin station, destination station, and ridership value.
+Historical charts remain available as evidence for the model:
 
-Source page:  
-https://data.gov.my/data-catalogue/ridership_od_rapidrail_daily
-
-Example yearly Parquet source:  
-https://storage.data.gov.my/transportation/rail/rapidrail_2026_daily.parquet
+- public transport ridership trends
+- service comparison
+- high-volume Rapid Rail station pairs
 
 ---
 
-## Important Data Interpretation Notes
+## Current scoring model
 
-- Ridership values represent the number of trips, not unique passengers.
-- One person may make multiple trips in a day, so this dashboard should describe values as “trips” rather than “people.”
-- Origin-destination data represents station-to-station movements, but a full passenger journey may involve line transfers.
-- The dashboard is currently focused on historical demand analysis, not real-time delay detection.
-- Real-time vehicle tracking may be added later, but delay analysis would require additional scheduled data collection and comparison against GTFS schedules.
+### Location Accessibility Score
 
----
+The current location score combines:
 
-## Project Structure
+- **45% proximity** — distance to the nearest Rapid Rail stop
+- **20% line choice** — number of nearby rail lines
+- **25% direct rail reach** — stops reachable on nearby lines before transfers
+- **10% station density** — number of stops inside the 800 m proxy
+
+The score is designed to be interpretable and will evolve as better accessibility inputs are added.
+
+### Station Accessibility
+
+Station-level accessibility is calculated **without ridership** using:
+
+- nearby line choice
+- direct rail reach
+- nearby station density
+
+This lets the project compare access and demand independently.
+
+### Demand Score
+
+Demand is the percentile rank of observed station activity from the Rapid Rail origin-destination dataset.
+
+### Demand–Access Gap
+
+The current gap is:
 
 ```text
-transitpulse_klang_valley/
-│
-├── data/
-│   ├── raw/
-│   └── processed/
+Demand percentile - Accessibility percentile
+```
+
+floored at zero.
+
+A larger value means observed station demand ranks higher than the station's relative accessibility ranking.
+
+---
+
+## Data sources
+
+TransitPulse currently uses official Malaysian open transport data.
+
+### Daily Public Transport Ridership
+
+Source:  
+https://data.gov.my/data-catalogue/ridership_headline
+
+Used for:
+
+- historical public transport demand
+- service-level ridership trends
+- evidence/context
+
+### Rapid Rail Daily Origin-Destination Ridership
+
+Source:  
+https://data.gov.my/data-catalogue/ridership_od_rapidrail_daily
+
+Used for:
+
+- station activity
+- origin-destination demand
+- top station movements
+- demand scoring
+
+### Rapid Rail KL GTFS Static
+
+Documentation:  
+https://developer.data.gov.my/realtime-api/gtfs-static
+
+Endpoint used by the app:
+
+```text
+https://api.data.gov.my/gtfs-static/prasarana?category=rapid-rail-kl
+```
+
+Used for:
+
+- station coordinates
+- rail routes
+- route shapes
+- station-to-line relationships
+- accessibility/connectivity modelling
+
+The Streamlit app caches the GTFS feed for 24 hours to avoid unnecessary repeated requests.
+
+---
+
+## Important interpretation notes
+
+- Ridership represents **trips, not unique passengers**.
+- OD journeys can include transfers between Rapid Rail lines.
+- The 800 m radius is a **straight-line catchment proxy**, not a routed walking path.
+- The current accessibility model does not yet include feeder buses, pedestrian barriers, population, employment density or service frequency.
+- The Demand–Access Gap is a screening metric and should not be interpreted as a definitive policy recommendation.
+
+---
+
+## Next analytical layers
+
+The strongest next improvements are:
+
+- population and population-density data
+- employment/activity density
+- actual pedestrian-network walking distances
+- feeder-bus accessibility
+- rail service frequency and operating hours
+- socioeconomic/mobility-need indicators
+- area-to-area comparison
+- automated data refresh
+
+These additions would allow TransitPulse to move from a station-centric network model toward a stronger **underserved-area / transit-gap model**.
+
+---
+
+## Tech stack
+
+- **Python**
+- **Pandas / NumPy**
+- **Parquet / PyArrow**
+- **Streamlit**
+- **Plotly**
+- **Folium + streamlit-folium**
+- **data.gov.my open datasets**
+- **GTFS Static**
+- **GitHub**
+- **Streamlit Community Cloud**
+
+---
+
+## Run locally
+
+Clone the project:
+
+```bash
+git clone https://github.com/ckolavennu/TransitPulse-Klang-Valley.git
+cd TransitPulse-Klang-Valley
+```
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+```
+
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the local data pipeline if you want to refresh the committed demand outputs:
+
+```bash
+python src/run_pipeline.py
+```
+
+Start the dashboard:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+The accessibility views fetch the Rapid Rail KL GTFS Static feed from the official data.gov.my API at runtime.
+
+---
+
+## Project structure
+
+```text
+TransitPulse-Klang-Valley/
 │
 ├── dashboard/
 │   └── app.py
 │
+├── data/
+│   ├── raw/
+│   ├── processed/
+│   └── external/
+│
 ├── notebooks/
-│   └── 01_data_exploration.ipynb
 │
 ├── src/
 │   ├── data_ingestion/
@@ -105,89 +255,22 @@ transitpulse_klang_valley/
 ├── outputs/
 ├── README.md
 ├── PROJECT_PLAN.md
-├── requirements.txt
-└── .gitignore
+└── requirements.txt
 ```
 
 ---
 
-## How to Run Locally
+## Portfolio purpose
 
-Clone the repository and move into the project folder:
+TransitPulse is designed as a practical urban-mobility analytics project rather than a generic dashboard. It demonstrates:
 
-```bash
-cd TransitPulse-Klang-Valley
-```
-
-Create a virtual environment:
-
-```bash
-python -m venv .venv
-```
-
-Activate the environment on Windows PowerShell:
-
-```bash
-.venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run the data pipeline:
-
-```bash
-python src/run_pipeline.py
-```
-
-Launch the dashboard:
-
-```bash
-streamlit run dashboard/app.py
-```
-
----
-
-## Current Status
-
-The current version is a working MVP. It successfully loads official ridership data, creates processed analytical outputs, and displays them in a deployed Streamlit dashboard.
-
-Completed:
-
-- Project structure created
-- Data ingestion pipeline created
-- Data cleaning scripts created
-- Processed summary tables generated
-- Streamlit dashboard MVP created
-- Dashboard V2 layout added
-- Overview, service comparison, OD explorer, station insights, and data notes pages working
-- Dashboard deployed on Streamlit Community Cloud
-
----
-
-## Planned Improvements
-
-Next improvements include:
-
-1. Add screenshots to README
-2. Improve visual design and dashboard layout
-3. Add more explanatory insight cards
-4. Add station map using GTFS Static stop data
-5. Build station catchment area analysis
-6. Create a Transit Accessibility Score
-7. Add a portfolio case study page
-
----
-
-## Limitations
-
-This project does not currently measure delays, cancellations, or service reliability. The current dashboard focuses on historical ridership and station-to-station demand. Real-time vehicle positions and delay analysis may be explored in a later version if sufficient data collection is implemented.
-
----
-
-## Portfolio Summary
-
-TransitPulse Klang Valley demonstrates data ingestion, data cleaning, exploratory analysis, dashboard development, and public-sector open data usage. It is designed as a practical data analytics portfolio project focused on transport demand and accessibility in Klang Valley.
+- public API/data ingestion
+- large origin-destination dataset processing
+- data cleaning and modelling
+- geospatial analysis
+- GTFS parsing
+- accessibility metric design
+- demand/access comparison
+- interactive mapping
+- analytical communication
+- deployed data-product development
