@@ -1,345 +1,350 @@
 # TransitPulse Klang Valley — Project Plan
 
-## 1. Project Overview
+## 1. Product Definition
 
-TransitPulse Klang Valley is a public transport analytics dashboard focused on ridership trends and station-to-station travel demand in Klang Valley.
+TransitPulse Klang Valley is an interactive public-transport accessibility and demand-intelligence project.
 
-The project uses official open transport data from data.gov.my to analyse how public transport usage changes over time, which services are most used, and which Rapid Rail station pairs have the highest demand.
+The product is now centred on two user needs:
 
-The long-term vision is to expand the project into a wider mobility intelligence dashboard that includes station accessibility, catchment areas, and potential underserved transit zones.
+### Direction 1 — Commuter Explorer
+
+**Question:** How well does public transport serve a place I care about?
+
+Users can choose a Rapid Rail station or click a location on the map to understand:
+
+- nearest rail access
+- station proximity
+- nearby rail lines
+- direct rail reach
+- nearby stations
+- station demand
+- common destinations
+- overall location accessibility
+
+### Direction 2 — Network & Planning Explorer
+
+**Question:** Where does observed transport demand appear stronger than station-level network access?
+
+The network view combines:
+
+- Rapid Rail geography
+- station connectivity
+- station density
+- line availability
+- OD demand
+- demand/access comparison
+
+The aim is to surface areas/stations that merit closer investigation, while clearly distinguishing exploratory indicators from definitive policy claims.
 
 ---
 
-## 2. Problem Statement
+## 2. Core Problem
 
-Public transport data is available publicly, but it is not always easy for students, analysts, or general users to explore it interactively. Raw datasets can be large, especially origin-destination ridership data, and require cleaning, aggregation, and visualisation before meaningful insights can be extracted.
+Public transport datasets can describe ridership and routes, but raw datasets do not directly answer practical questions such as:
 
-This project aims to solve that by creating a dashboard that helps users understand:
+- Is a location well served by rail?
+- What rail options exist near it?
+- How much of the network is directly reachable?
+- Which stations experience high observed demand despite weaker network access?
+- Where should an analyst investigate potential accessibility gaps further?
 
-- overall public transport ridership trends
-- service-level demand patterns
-- busiest station pairs
-- top origin and destination stations
-- station-level travel flows
+TransitPulse combines official open transport datasets into a single interactive analytical layer designed around those questions.
 
 ---
 
-## 3. Project Scope
+## 3. Current Data Layers
 
-### Current Scope
+### Demand Layer
 
-The current MVP covers:
+Built from:
+
+- Daily Public Transport Ridership
+- Rapid Rail Daily Origin-Destination Ridership
+
+Provides:
+
+- ridership trends
+- service comparisons
+- station activity
+- OD flows
+- demand percentiles
+
+### Accessibility Layer
+
+Built from the official Rapid Rail KL GTFS Static feed.
+
+Provides:
+
+- station coordinates
+- route membership
+- route shapes
+- nearby station density
+- line choice
+- direct rail reach
+- accessibility scoring
+
+### Combined Layer
+
+Combines independent demand and accessibility measures to create:
+
+- demand vs accessibility quadrants
+- a Demand–Access Gap
+- station-level screening/prioritisation views
+
+---
+
+## 4. Current Product Experience
+
+### Explore My Area
+
+Users can:
+
+- select a Rapid Rail station
+- click a location on the map
+- see the nearest station
+- estimate rail proximity
+- view an 800 m straight-line catchment proxy
+- see nearby lines
+- see direct rail reach
+- see nearby stations
+- inspect top observed destinations
+- view a location Accessibility Score
+
+### Network Explorer
+
+Users can:
+
+- see the Rapid Rail network on a map
+- view route shapes
+- inspect station demand and accessibility
+- show 800 m station catchment proxies
+- compare demand and accessibility in a quadrant chart
+- identify high-demand / lower-access stations
+- inspect a ranked review table
+
+### Demand Evidence
+
+Users can still inspect:
+
+- historical service ridership trends
+- service totals
+- high-volume station-to-station movements
+
+These charts support the product rather than define it.
+
+### Methodology
+
+The app explicitly documents:
+
+- score components
+- demand/access separation
+- data sources
+- limitations
+- interpretation rules
+- next analytical inputs
+
+---
+
+## 5. Scoring Framework
+
+### Location Accessibility Score
+
+Current weights:
+
+- 45% proximity to nearest Rapid Rail stop
+- 20% nearby line choice
+- 25% direct rail reach
+- 10% nearby station density
+
+### Station Accessibility Score
+
+Uses network characteristics only:
+
+- accessible lines around the station
+- direct reach on those lines
+- nearby station density
+
+Demand is intentionally excluded so that access and observed usage can be compared independently.
+
+### Demand Score
+
+Percentile rank of 2026 station activity from Rapid Rail OD data.
+
+### Demand–Access Gap
+
+```text
+max(0, Demand percentile - Accessibility percentile)
+```
+
+This is a screening metric. It does not by itself establish that an area is underserved.
+
+---
+
+## 6. Milestones
+
+## Milestone 1 — Project Foundation
+
+**Status: Completed**
+
+- repository and project structure
+- environment and requirements
+- README and project plan
+- Streamlit foundation
+
+## Milestone 2 — Demand Data Ingestion
+
+**Status: Completed**
 
 - daily public transport ridership
-- service-level ridership comparison
-- Rapid Rail origin-destination demand
-- station-level demand summaries
-- dashboard filters and visualisations
+- Rapid Rail OD data
+- reusable ingestion pipeline
+- processed Parquet/CSV outputs
 
-### Out of Scope for MVP
+## Milestone 3 — Demand Cleaning & Modelling
 
-The following are not part of the current MVP:
+**Status: Completed**
 
-- real-time delay detection
-- route punctuality measurement
-- train or bus cancellation analysis
-- predictive modelling
-- full GIS accessibility scoring
-- mobile app development
+- station-code extraction
+- station summaries
+- station-pair summaries
+- monthly/service summaries
+- dashboard-ready outputs
 
-These can be considered later once the base analytics layer is stable.
+## Milestone 4 — Demand Dashboard MVP
 
----
+**Status: Completed / superseded**
 
-## 4. Main Datasets
+The initial dashboard proved the data pipeline and analytics worked.
 
-### Daily Public Transport Ridership
+It included:
 
-Purpose:
+- ridership overview
+- service comparison
+- OD explorer
+- station insights
 
-- analyse ridership trends across services
-- compare LRT, MRT, Monorail, bus, KTM, and other services
-- identify long-term usage changes
+The project has since moved beyond the chart-first MVP.
 
-Expected fields include:
+## Milestone 5 — Public Deployment
 
-- date
-- service
-- ridership
+**Status: Completed**
 
-### Daily Origin-Destination Ridership: Rapid Rail Klang Valley
+- GitHub repository published
+- processed dashboard datasets committed
+- Streamlit Community Cloud deployment
+- live dashboard link added to README
 
-Purpose:
+Live app:
 
-- analyse station-to-station demand
-- identify busiest origin-destination pairs
-- rank origin and destination stations
-- understand key travel corridors
+https://transitpulse-klang.streamlit.app/
 
-Expected fields include:
+## Milestone 6 — Accessibility & Geospatial Intelligence
 
-- date
-- origin
-- destination
-- ridership
+**Status: Implemented — Version 1**
 
----
+- official GTFS Static integration
+- station coordinates
+- route shapes
+- station-to-line relationships
+- station-density calculations
+- direct rail reach
+- Accessibility Score
+- commuter location explorer
+- network map
+- demand vs accessibility analysis
+- Demand–Access Gap
 
-## 5. Milestones
+## Milestone 7 — True Underserved-Area Model
 
-## Milestone 1: Project Setup
+**Status: Next**
 
-Status: Completed
+The next model should move beyond station-centric access and incorporate:
 
-Tasks:
-
-- Create project folder structure
-- Add README.md
-- Add PROJECT_PLAN.md
-- Add requirements.txt
-- Add .gitignore
-- Set up Python virtual environment
-- Install dependencies
-
-Deliverable:
-
-- Clean local project structure ready for development
-
----
-
-## Milestone 2: Data Ingestion
-
-Status: Completed / Working MVP
-
-Tasks:
-
-- Download daily public transport ridership data
-- Download Rapid Rail OD ridership data
-- Store raw files in data/raw
-- Create reusable ingestion script
-- Create main pipeline runner
+- population density
+- employment/activity density
+- pedestrian walking networks
+- feeder-bus coverage
+- service frequency
+- operating hours
+- socioeconomic/mobility-need indicators
 
 Deliverable:
 
-- Raw datasets available locally
+> A defensible area-level transit-gap model rather than a station-only accessibility proxy.
 
----
+## Milestone 8 — Product Expansion
 
-## Milestone 3: Data Cleaning and Summary Tables
+**Status: Future**
 
-Status: Completed / Working MVP
+Potential additions:
 
-Tasks:
-
-- Clean date fields
-- Standardise service names
-- Validate ridership numeric fields
-- Create monthly ridership summaries
-- Create service comparison summaries
-- Create station summary tables
-- Create station-pair summary tables
-
-Deliverable:
-
-- Processed dashboard-ready files in data/processed
-
----
-
-## Milestone 4: Dashboard MVP
-
-Status: Completed
-
-Tasks:
-
-- Build Streamlit dashboard layout
-- Add Overview page
-- Add Service Comparison page
-- Add OD Explorer page
-- Add Station Insights page
-- Add Data Notes page
-- Add sidebar filters
-- Add KPI cards
-- Add Plotly visualisations
-
-Deliverable:
-
-- Working local Streamlit dashboard
-
----
-
-## Milestone 5: Documentation and GitHub Preparation
-
-Status: In Progress
-
-Tasks:
-
-- Improve README.md
-- Add project purpose and methodology
-- Add data source descriptions
-- Add limitations section
-- Add setup instructions
-- Add screenshots
-- Push project to GitHub
-
-Deliverable:
-
-- GitHub-ready project repository
-
----
-
-## Milestone 6: Deployment
-
-Status: Not Started
-
-Tasks:
-
-- Push final files to GitHub
-- Deploy on Streamlit Community Cloud
-- Test deployed dashboard
-- Add live dashboard link to README
-- Add dashboard link to portfolio website
-
-Deliverable:
-
-- Public dashboard link
-
----
-
-## Milestone 7: Accessibility and Mapping Layer
-
-Status: Future Enhancement
-
-Tasks:
-
-- Load GTFS Static station and stop data
-- Extract station coordinates
-- Create interactive station map
-- Add station demand markers
-- Add catchment radius layer
-- Define Transit Accessibility Score
-- Identify potential low-access areas
-
-Deliverable:
-
-- Map-based accessibility dashboard page
-
----
-
-## 6. Suggested Dashboard Pages
-
-### Page 1: Overview
-
-Purpose:
-
-- give a quick summary of ridership activity
-
-Includes:
-
-- total trips
-- average daily trips
-- services selected
-- top service
-- monthly ridership trend
-- top services by ridership
-- service share chart
-
-### Page 2: Service Comparison
-
-Purpose:
-
-- compare transport services over time
-
-Includes:
-
-- service-level trends
-- ranking by total trips
-- share of ridership
-- growth or decline analysis
-
-### Page 3: OD Explorer
-
-Purpose:
-
-- explore Rapid Rail station-to-station travel demand
-
-Includes:
-
-- busiest station pairs
-- origin-destination search
-- top OD table
-- filtered download option
-
-### Page 4: Station Insights
-
-Purpose:
-
-- understand individual station demand
-
-Includes:
-
-- outbound trips
-- inbound trips
-- top destinations from selected station
-- top origins to selected station
-
-### Page 5: Data Notes
-
-Purpose:
-
-- explain methodology, data interpretation, and limitations
-
-Includes:
-
-- data source explanation
-- ridership meaning
-- current project limitations
-- future enhancements
+- compare two locations
+- suburb / postcode search
+- actual walking routes to stations
+- journey-time accessibility
+- real-time operational layer
+- automated scheduled data refresh
+- SvelteKit portfolio case-study frontend
 
 ---
 
 ## 7. Success Criteria
 
-The project will be considered successful when:
+TransitPulse should be considered successful when it can answer these questions clearly:
 
-- the pipeline runs without errors
-- processed data files are generated correctly
-- the dashboard opens locally
-- all dashboard pages work
-- filters update charts correctly
-- README clearly explains the project
-- the project is pushed to GitHub
-- the dashboard is deployed publicly
-- the project is added to the portfolio website
+### For a commuter
+
+- How close is rail?
+- Which stations and lines are nearby?
+- How much of the network can I reach directly?
+- Is the location comparatively well connected?
+- Where do people commonly travel from the nearest station?
+
+### For an analyst/planner
+
+- Which stations have the strongest observed demand?
+- Which stations have strong or weak network access?
+- Where does demand rank above accessibility?
+- Which locations merit deeper accessibility investigation?
+- What additional evidence is required before making a policy claim?
 
 ---
 
-## 8. Future Enhancements
+## 8. Methodological Guardrails
 
-Potential future improvements:
+TransitPulse should not claim more than the current data supports.
 
-- GTFS Static station map
-- station catchment analysis
-- Transit Accessibility Score
-- real-time vehicle position layer
-- automated data refresh using GitHub Actions
-- historical service recovery analysis after disruption periods
-- dashboard design polish
-- SvelteKit portfolio case study page
+Do not describe a location as a confirmed “transit desert” based only on the current model.
+
+Current limitations include:
+
+- station-centric rather than population-centric scoring
+- straight-line catchments rather than pedestrian network distances
+- no feeder-bus accessibility in the score
+- no service-frequency weighting
+- no travel-time isochrones
+- no socioeconomic need layer
+
+These limitations should remain visible in the app and documentation.
 
 ---
 
 ## 9. Portfolio Value
 
-This project demonstrates:
+The project now demonstrates more than dashboard development:
 
-- public open data usage
-- data ingestion
-- data cleaning
-- large dataset handling
-- origin-destination analysis
-- time-series analysis
-- dashboard development
-- visual storytelling
-- practical urban mobility analytics
+- open-government data ingestion
+- large OD dataset processing
+- GTFS integration
+- geospatial analysis
+- accessibility modelling
+- metric design
+- demand/access comparison
+- interactive mapping
+- product-oriented analytics
+- transparent methodology
+- public deployment
 
-It is designed to be stronger than a generic dataset visualisation project because it uses real Malaysian public transport data and answers a practical mobility-related problem.
+The key portfolio story is:
+
+> TransitPulse combines official Malaysian transport demand and GTFS network data to help users understand rail accessibility around a location and to identify where observed station demand may be stronger than relative network access.
